@@ -1,0 +1,6 @@
+{
+  "name": "Gemini Studio",
+  "description": "Advanced AI Android app generator and chatbot with one-click APK export and live preview.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

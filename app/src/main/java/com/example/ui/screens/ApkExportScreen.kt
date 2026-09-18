@@ -126,7 +126,87 @@ fun ApkExportScreen(
             }
         }
 
-        Spacer(modifier = Modifier.height(20.dp))
+        Spacer(modifier = Modifier.height(14.dp))
+
+        var showCiGuide by remember { mutableStateOf(false) }
+
+        // GitHub Actions CI/CD Build Card
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF0F172A)),
+            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF38BDF8).copy(alpha = 0.4f))
+        ) {
+            Column(modifier = Modifier.padding(14.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.CloudDownload, contentDescription = null, tint = Color(0xFF38BDF8), modifier = Modifier.size(20.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "دریافت APK رسمی و واقعی (گیت‌هاب اکشنز)",
+                            color = Color.White,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    TextButton(onClick = { showCiGuide = !showCiGuide }) {
+                        Text(if (showCiGuide) "بستن" else "مشاهده راهنما", color = Color(0xFF38BDF8), fontSize = 11.sp)
+                    }
+                }
+
+                Text(
+                    text = "ورک‌فلو GitHub CI با گریدل واقعی، کلید اختصاصی و ساین رسمی تنظیم شده و در تب Actions آماده دانلود است.",
+                    color = Color(0xFF94A3B8),
+                    fontSize = 11.sp,
+                    lineHeight = 16.sp
+                )
+
+                AnimatedVisibility(visible = showCiGuide) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 10.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Surface(
+                            color = Color(0xFF1E293B),
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.padding(10.dp)) {
+                                Text("مراحل دانلود فایل نصبی ۱۰۰٪ استاندارد:", color = Color(0xFF38BDF8), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text("۱. کد پروژه را در گیت‌هاب خود Push کنید.", color = Color.White, fontSize = 11.sp)
+                                Text("۲. در تب Actions ریپازیتوری، بیلد خودکار Android CI اجرا می‌شود.", color = Color.White, fontSize = 11.sp)
+                                Text("۳. پس از پایان، در بخش Artifacts فایل app-debug.apk را دانلود و مستقیماً روی گوشی نصب کنید.", color = Color.White, fontSize = 11.sp)
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Button(
+                                    onClick = {
+                                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                        clipboard.setPrimaryClip(ClipData.newPlainText("Workflow Path", ".github/workflows/android_build.yml"))
+                                        Toast.makeText(context, "مسیر ورک‌فلو کپی شد", Toast.LENGTH_SHORT).show()
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0284C7)),
+                                    modifier = Modifier.fillMaxWidth().height(36.dp),
+                                    shape = RoundedCornerShape(8.dp)
+                                ) {
+                                    Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(14.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("کپی مسیر فایل ورک‌فلو (.github)", fontSize = 11.sp)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(14.dp))
 
         // THE CORE BUTTON: One-click Build & Export APK
         Button(
@@ -305,9 +385,18 @@ fun ApkExportScreen(
                                     modifier = Modifier.size(16.dp)
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text("نصب مستقیم", color = Color(0xFF34D399), fontSize = 12.sp)
+                                Text("نصب آزمایشی", color = Color(0xFF34D399), fontSize = 12.sp)
                             }
                         }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Text(
+                            text = "نکته: در صورت مواجهه با خطای Parse Error در نصب مستقیم، از بخش زیر (ورک‌فلو گیت‌هاب) خروجی باینری رسمی و امضاشده را دانلود کنید.",
+                            color = Color(0xFFFDE047),
+                            fontSize = 10.sp,
+                            lineHeight = 14.sp
+                        )
                     }
                 }
             }

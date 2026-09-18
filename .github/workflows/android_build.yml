@@ -1,4 +1,4 @@
-name: Android Build
+name: Android CI Build APK
 
 on:
   push:
@@ -13,8 +13,9 @@ concurrency:
 
 jobs:
   build:
-    name: Build Android APK
+    name: Build & Export APK
     runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     steps:
       - name: Checkout repository
@@ -29,63 +30,64 @@ jobs:
           java-version: '17'
           cache: 'gradle'
 
-      - name: Set up Android SDK
+      - name: Setup Android SDK
         uses: android-actions/setup-android@v3
+
+      - name: Accept Android SDK Licenses & Install Components
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;36.0.0" || true
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Decode Debug Keystore
+      - name: Setup Keystore
         run: |
+          set -e
           if [ -f "debug.keystore.base64" ]; then
-            echo "Decoding debug.keystore from debug.keystore.base64..."
+            echo "Restoring debug.keystore from base64..."
             base64 -d debug.keystore.base64 > debug.keystore
-          elif [ ! -f "debug.keystore" ]; then
+          fi
+          if [ ! -f "debug.keystore" ]; then
             echo "Generating fallback debug.keystore..."
             keytool -genkey -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
           fi
 
-      - name: Configure Secrets (.env)
+      - name: Setup Environment Variables
         env:
-          GEMINI_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_API_KEY_SECRET: ${{ secrets.GEMINI_API_KEY }}
         run: |
-          if [ -n "$GEMINI_KEY" ]; then
-            echo "Injecting GEMINI_API_KEY from GitHub Secrets into .env..."
-            echo "GEMINI_API_KEY=$GEMINI_KEY" > .env
+          if [ -n "$GEMINI_API_KEY_SECRET" ]; then
+            echo "GEMINI_API_KEY=$GEMINI_API_KEY_SECRET" > .env
           elif [ -f ".env.example" ]; then
-            echo "Using .env.example fallback for GEMINI_API_KEY..."
             cp .env.example .env
           else
-            echo "Creating empty .env..."
             echo "GEMINI_API_KEY=" > .env
           fi
 
-      - name: Ensure gradlew executable
+      - name: Ensure gradlew Executable
         run: |
-          if [ ! -f "gradlew" ]; then
-            gradle wrapper
-          fi
-          chmod +x gradlew
+          chmod +x gradlew || true
 
-      - name: Build APK with Gradle
-        run: ./gradlew assembleDebug --no-daemon --no-configuration-cache --stacktrace
-
-      - name: Find and Stage APK
-        id: find_apk
+      - name: Build Debug APK
         run: |
-          mkdir -p output_apk
-          APK_FILE=$(find app/build/outputs/apk/debug/ -type f -name "*.apk" | head -n 1)
-          if [ -z "$APK_FILE" ]; then
-            echo "ERROR: No APK found!"
+          ./gradlew assembleDebug --no-daemon --no-configuration-cache --stacktrace
+
+      - name: Stage APK Files
+        id: stage_apk
+        run: |
+          mkdir -p build_output
+          find app/build/outputs/apk/debug/ -type f -name "*.apk" -exec cp {} build_output/app-debug.apk \;
+          if [ ! -f "build_output/app-debug.apk" ]; then
+            echo "::error::APK file not found in app/build/outputs/apk/debug/"
             exit 1
           fi
-          echo "Found APK at: $APK_FILE"
-          cp "$APK_FILE" output_apk/app-debug.apk
+          echo "APK successfully staged at build_output/app-debug.apk"
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: app-debug-apk
-          path: output_apk/app-debug.apk
+          name: app-debug
+          path: build_output/app-debug.apk
           retention-days: 14
           if-no-files-found: error

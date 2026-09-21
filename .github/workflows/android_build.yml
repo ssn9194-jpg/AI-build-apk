@@ -2,39 +2,168 @@ name: Android CI Build APK
 
 on:
   push:
-    branches: [ "**" ]
-  pull_request:
-    branches: [ "**" ]
+    branches:
+      - main
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: android-apk-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   build:
-    name: Build & Export APK
+    name: Build Debug APK
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
 
       - name: Setup Java 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
-          distribution: 'temurin'
-          java-version: '17'
+          distribution: temurin
+          java-version: "17"
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
 
-      - name: Accept Android SDK Licenses & Install Components
+      - name: Install Android SDK 36.1
+        shell: bash
         run: |
-          set +e
+          set -e
+
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+
+          if [ ! -x "$SDKMANAGER" ]; then
+            SDKMANAGER="$(
+              find "$ANDROID_HOME" \
+                -type f \
+                -name sdkmanager \
+                2>/dev/null \
+              | sort \
+              | tail -n 1
+            )"
+          fi
+
+          if [ -z "$SDKMANAGER" ] || [ ! -x "$SDKMANAGER" ]; then
+            echo "::error::sdkmanager not found"
+            exit 1
+          fi
+
+          echo "Using sdkmanager:"
+          echo "$SDKMANAGER"
+
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+
+          "$SDKMANAGER" \
+            "platform-tools" \
+            "platforms;android-36.1" \
+            "build-tools;36.0.0"
+
+          echo "=== Installed Android platforms ==="
+          ls -la "$ANDROID_HOME/platforms"
+
+          echo "=== Installed build tools ==="
+          ls -la "$ANDROID_HOME/build-tools"
+
+      - name: Setup Debug Keystore
+        shell: bash
+        run: |
+          set -e
+
+          if [ -f "debug.keystore.base64" ]; then
+            echo "Restoring debug keystore..."
+            base64 -d debug.keystore.base64 > debug.keystore
+          fi
+
+          if [ ! -f "debug.keystore" ]; then
+            echo "Generating debug keystore..."
+
+            keytool \
+              -genkeypair \
+              -v \
+              -keystore debug.keystore \
+              -storepass android \
+              -alias androiddebugkey \
+              -keypass android \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -dname "CN=Android Debug,O=Android,C=US"
+          fi
+
+          test -f debug.keystore
+
+      - name: Setup Environment
+        shell: bash
+        env:
+          GEMINI_API_KEY_SECRET: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          set -e
+
+          if [ -n "$GEMINI_API_KEY_SECRET" ]; then
+            printf 'GEMINI_API_KEY=%s\n' \
+              "$GEMINI_API_KEY_SECRET" > .env
+
+            echo "Using GEMINI_API_KEY from GitHub Secrets."
+          elif [ -f ".env.example" ]; then
+            cp .env.example .env
+            echo "Using .env.example for build."
+          else
+            echo "GEMINI_API_KEY=MY_GEMINI_API_KEY" > .env
+            echo "Using placeholder API key."
+          fi
+
+      - name: Prepare Gradle Wrapper
+        shell: bash
+        run: |
+          chmod +x gradlew
+
+          echo "=== Java ==="
+          java -version
+
+          echo "=== Gradle wrapper ==="
+          ./gradlew --version
+
+      - name: Build Debug APK
+        shell: bash
+        run: |
+          ./gradlew \
+            :app:assembleDebug \
+            --no-daemon \
+            --stacktrace
+
+      - name: Verify APK
+        shell: bash
+        run: |
+          echo "=== APK output ==="
+
+          find app/build/outputs/apk \
+            -type f \
+            -name "*.apk" \
+            -print
+
+          APK="app/build/outputs/apk/debug/app-debug.apk"
+
+          if [ ! -f "$APK" ]; then
+            echo "::error::app-debug.apk was not generated"
+            exit 1
+          fi
+
+          ls -lh "$APK"
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: AI-build-apk-debug
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 30          set +e
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses 2>/dev/null || true
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "platforms;android-36" "build-tools;36.0.0" "platform-tools" || true
           set -e

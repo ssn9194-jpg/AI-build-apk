@@ -55,6 +55,107 @@ jobs:
             exit 1
           fi
 
+          echo "Using sdkmanager: $SDKMANAGER"
+
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+
+          "$SDKMANAGER" \
+            "platform-tools" \
+            "platforms;android-36.1" \
+            "build-tools;36.0.0"
+
+      - name: Setup Debug Keystore
+        shell: bash
+        run: |
+          set -e
+
+          if [ -f "debug.keystore.base64" ]; then
+            base64 -d debug.keystore.base64 > debug.keystore
+          fi
+
+          if [ ! -f "debug.keystore" ]; then
+            keytool \
+              -genkeypair \
+              -v \
+              -keystore debug.keystore \
+              -storepass android \
+              -alias androiddebugkey \
+              -keypass android \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -dname "CN=Android Debug,O=Android,C=US"
+          fi
+
+          test -f debug.keystore
+
+      - name: Setup Environment
+        shell: bash
+        env:
+          GEMINI_API_KEY_SECRET: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          set -e
+
+          if [ -n "$GEMINI_API_KEY_SECRET" ]; then
+            printf 'GEMINI_API_KEY=%s\n' "$GEMINI_API_KEY_SECRET" > .env
+          elif [ -f ".env.example" ]; then
+            cp .env.example .env
+          else
+            echo "GEMINI_API_KEY=MY_GEMINI_API_KEY" > .env
+          fi
+
+      - name: Prepare Gradle Wrapper
+        shell: bash
+        run: |
+          chmod +x gradlew
+          java -version
+          ./gradlew --version
+
+      - name: Build Debug APK
+        shell: bash
+        run: |
+          ./gradlew :app:assembleDebug --no-daemon --stacktrace
+
+      - name: Verify APK
+        shell: bash
+        run: |
+          APK="app/build/outputs/apk/debug/app-debug.apk"
+
+          find app/build/outputs/apk \
+            -type f \
+            -name "*.apk" \
+            -print
+
+          test -f "$APK"
+          ls -lh "$APK"
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: AI-build-apk-debug
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 30        run: |
+          set -e
+
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+
+          if [ ! -x "$SDKMANAGER" ]; then
+            SDKMANAGER="$(
+              find "$ANDROID_HOME" \
+                -type f \
+                -name sdkmanager \
+                2>/dev/null \
+              | sort \
+              | tail -n 1
+            )"
+          fi
+
+          if [ -z "$SDKMANAGER" ] || [ ! -x "$SDKMANAGER" ]; then
+            echo "::error::sdkmanager not found"
+            exit 1
+          fi
+
           echo "Using sdkmanager:"
           echo "$SDKMANAGER"
 
